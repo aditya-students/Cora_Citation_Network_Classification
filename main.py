@@ -20,15 +20,21 @@ CORA_CLASSES = {
 
 BASE_DIR    = os.path.dirname(__file__)
 MODEL_PATH  = os.path.join(BASE_DIR, 'simple_gcn_cora.onnx')
-DATA_DIR    = os.path.join(BASE_DIR, "data", "Planetoid")
 STATIC_DIR  = os.path.join(BASE_DIR, "static")
+CORA_NPZ    = os.path.join(BASE_DIR, "cora_data", "cora_graph.npz")
 
 model_session = ort.InferenceSession(MODEL_PATH, providers=["CPUExecutionProvider"])
 
+# Load pre-exported Cora graph data (no torch_geometric needed)
 try:
-    from torch_geometric.datasets import Planetoid
-    cora_dataset = Planetoid(root=DATA_DIR, name="Cora")[0]
-except Exception:
+    _npz = np.load(CORA_NPZ)
+    class _CoraData:
+        x          = _npz["x"].astype(np.float32)
+        edge_index = _npz["edge_index"].astype(np.int64)
+        num_nodes  = int(_npz["x"].shape[0])
+    cora_dataset = _CoraData()
+except Exception as _e:
+    print(f"Warning: could not load Cora data: {_e}")
     cora_dataset = None
 
 app = FastAPI()
@@ -136,13 +142,8 @@ def predict_custom_graph(request: GraphPredictRequest):
 
 @app.post('/predict/cora_node')
 def predict_real_cora_nodes(request: CoraNodeRequest):
-    global cora_dataset
     if cora_dataset is None:
-        from torch_geometric.datasets import Planetoid
-        try:
-            cora_dataset = Planetoid(root=DATA_DIR, name="Cora")[0]
-        except Exception as error:
-            raise HTTPException(500, f"failed to load cora dataset: {error}")
+        raise HTTPException(503, "Cora dataset not available on this server.")
 
     largest_valid_index = cora_dataset.num_nodes - 1
     invalid_index = [
@@ -155,8 +156,8 @@ def predict_real_cora_nodes(request: CoraNodeRequest):
         )
 
     return run_model(
-        cora_dataset.x.numpy(),
-        cora_dataset.edge_index.numpy(),
+        cora_dataset.x,
+        cora_dataset.edge_index,
         request.node_indices
     )
 

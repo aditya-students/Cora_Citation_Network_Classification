@@ -29,5 +29,4 @@ data/
 .DS_Store
 Thumbs.db
 
-# Scratch / temporary
-export_onnx.py
+# Scratch / temporary (none — scripts are tracked for reproducibility)
